@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str
     openrouter_model: str = "openai/gpt-4o"
     openrouter_extract_model: str = "openai/gpt-4o-mini"
-    openrouter_stt_model: str = "openai/whisper-1"
+    openrouter_stt_model: str = "openai/whisper-large-v3"
     google_service_account_file: str = "service-account.json"
     google_calendar_id: str
     bot_use_webhook: bool = False

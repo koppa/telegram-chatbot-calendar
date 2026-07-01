@@ -9,7 +9,7 @@ A Python bot that receives Telegram messages (text, photo, voice/audio), extract
 | Language | Python 3.11+ |
 | Telegram | [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) v21+ (async) |
 | Image Analysis | OpenRouter Vision API (`openai/gpt-4o`) |
-| Audio Transcription | OpenRouter Whisper API (`openai/whisper-1`) |
+| Audio Transcription | OpenRouter Whisper API (`openai/whisper-large-v3`) |
 | LLM Extraction | OpenRouter text model with JSON output |
 | Calendar API | Google Calendar API v3 (Service Account) |
 | Container | Docker + docker-compose |
@@ -66,7 +66,7 @@ cp .env.example .env
 | `OPENROUTER_API_KEY` | API key from OpenRouter |
 | `OPENROUTER_MODEL` | Vision model (default: `openai/gpt-4o`) |
 | `OPENROUTER_EXTRACT_MODEL` | Extraction model (default: `openai/gpt-4o-mini`) |
-| `OPENROUTER_STT_MODEL` | Speech-to-text model (default: `openai/whisper-1`) |
+| `OPENROUTER_STT_MODEL` | Speech-to-text model (default: `openai/whisper-large-v3`) |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | Path to the service account JSON file |
 | `GOOGLE_CALENDAR_ID` | Shared calendar ID |
 | `BOT_USE_WEBHOOK` | `true` for webhook, `false` for polling (default) |

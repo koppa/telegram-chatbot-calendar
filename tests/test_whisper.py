@@ -1,66 +1,50 @@
+import base64
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.config import settings
-from src.services.whisper import transcribe_audio, _client as whisper_client
-
-
-@pytest.fixture(autouse=True)
-def reset_whisper_client():
-    import src.services.whisper as w
-    w._client = None
-    yield
-    w._client = None
+from src.services.whisper import transcribe_audio
 
 
 @pytest.fixture
-def mock_openai_client():
-    mock_transcript = MagicMock()
-    mock_transcript.text = "Termin am Freitag um 14 Uhr"
+def mock_httpx_post():
+    with patch("src.services.whisper.httpx.AsyncClient") as mock_client_cls:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"text": "Termin am Freitag um 14 Uhr"}
 
-    mock_create = AsyncMock(return_value=mock_transcript)
-
-    mock_transcriptions = MagicMock()
-    mock_transcriptions.create = mock_create
-
-    mock_audio = MagicMock()
-    mock_audio.transcriptions = mock_transcriptions
-
-    mock_client = MagicMock()
-    mock_client.audio = mock_audio
-
-    with patch("src.services.whisper.AsyncOpenAI", return_value=mock_client) as mock_constructor:
-        yield mock_create, mock_constructor
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+        yield mock_client
 
 
 class TestTranscribeAudio:
-    async def test_returns_transcription_text(self, mock_openai_client):
+    async def test_returns_transcription_text(self, mock_httpx_post):
         result = await transcribe_audio(b"\x00\x01\x02")
         assert result == "Termin am Freitag um 14 Uhr"
 
-    async def test_passes_correct_model(self, mock_openai_client):
+    async def test_sends_base64_audio(self, mock_httpx_post):
+        audio = b"\x00\x01\x02"
+        await transcribe_audio(audio)
+        call_kwargs = mock_httpx_post.post.call_args[1]
+        assert call_kwargs["json"]["input_audio"]["data"] == base64.b64encode(audio).decode("ascii")
+        assert call_kwargs["json"]["model"] == settings.openrouter_stt_model
+
+    async def test_detects_format_from_filename(self, mock_httpx_post):
+        await transcribe_audio(b"\x00\x01\x02", filename="voice.wav")
+        call_kwargs = mock_httpx_post.post.call_args[1]
+        assert call_kwargs["json"]["input_audio"]["format"] == "wav"
+
+    async def test_defaults_to_ogg_format(self, mock_httpx_post):
         await transcribe_audio(b"\x00\x01\x02")
-        mock_create, _ = mock_openai_client
-        mock_create.assert_awaited_once_with(
-            model=settings.openrouter_stt_model,
-            file=("audio.ogg", b"\x00\x01\x02"),
-        )
+        call_kwargs = mock_httpx_post.post.call_args[1]
+        assert call_kwargs["json"]["input_audio"]["format"] == "ogg"
 
-    async def test_passes_custom_filename(self, mock_openai_client):
-        await transcribe_audio(b"\x00\x01\x02", filename="voice.mp3")
-        mock_create, _ = mock_openai_client
-        mock_create.assert_awaited_once_with(
-            model=settings.openrouter_stt_model,
-            file=("voice.mp3", b"\x00\x01\x02"),
-        )
-
-    async def test_reuses_client_instance(self, mock_openai_client):
+    async def test_passes_correct_url_and_headers(self, mock_httpx_post):
         await transcribe_audio(b"\x00")
-        await transcribe_audio(b"\x01")
-        mock_create, mock_constructor = mock_openai_client
-        assert mock_create.await_count == 2
-        mock_constructor.assert_called_once_with(
-            api_key=settings.openrouter_api_key,
-            base_url="https://api.openrouter.ai/v1",
-        )
+        call_kwargs = mock_httpx_post.post.call_args[1]
+        assert call_kwargs["headers"]["Authorization"] == f"Bearer {settings.openrouter_api_key}"
+        assert call_kwargs["headers"]["Content-Type"] == "application/json"
