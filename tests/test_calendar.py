@@ -43,7 +43,7 @@ class TestCreateEvent:
         body = insert_call.call_args[1]["body"]
         assert body["summary"] == "Zahnarzttermin"
         assert body["start"]["timeZone"] == "Europe/Berlin"
-        assert body["end"]["dateTime"] == "2026-07-02T11:00:00"
+        assert body["end"]["dateTime"] == "2026-07-02T11:00:00+02:00"
         assert body["location"] == "Praxis Dr. Müller"
         assert body["description"] == "Jährliche Kontrolle"
 
@@ -57,14 +57,14 @@ class TestCreateEvent:
         body = mock_service.events.return_value.insert.call_args[1]["body"]
         assert "2026-07-02T15:30:00" in body["end"]["dateTime"]
 
-    async def test_uses_start_as_end_when_no_end_or_duration(self, mock_service):
+    async def test_defaults_to_30min_when_no_end_or_duration(self, mock_service):
         event = CalendarEvent(
             summary="Ganztägig",
-            start_datetime=datetime(2026, 7, 2, 0, 0),
+            start_datetime=datetime(2026, 7, 2, 10, 0),
         )
         await create_event(event)
         body = mock_service.events.return_value.insert.call_args[1]["body"]
-        assert body["start"] == body["end"]
+        assert body["end"]["dateTime"] == "2026-07-02T10:30:00+02:00"
 
     async def test_sends_correct_calendar_id(self, mock_service):
         await create_event(SAMPLE_EVENT)

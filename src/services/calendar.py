@@ -1,3 +1,6 @@
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
@@ -5,6 +8,15 @@ from src.config import settings
 from src.models.event import CalendarEvent
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+
+DEFAULT_DURATION = 30
+
+
+def _localize(dt: datetime) -> datetime:
+    tz = ZoneInfo(settings.timezone)
+    if dt.tzinfo is not None:
+        return dt.astimezone(tz)
+    return dt.replace(tzinfo=tz)
 
 
 _service = None
@@ -23,29 +35,26 @@ def _get_service():
 async def create_event(event: CalendarEvent) -> str:
     service = _get_service()
 
-    tz = settings.timezone
+    start = _localize(event.start_datetime)
     body = {
         "summary": event.summary,
         "start": {
-            "dateTime": event.start_datetime.isoformat(),
-            "timeZone": tz,
+            "dateTime": start.isoformat(),
+            "timeZone": settings.timezone,
         },
     }
 
     if event.end_datetime:
-        body["end"] = {
-            "dateTime": event.end_datetime.isoformat(),
-            "timeZone": tz,
-        }
+        end = _localize(event.end_datetime)
     elif event.duration_minutes:
-        from datetime import timedelta
-        end = event.start_datetime + timedelta(minutes=event.duration_minutes)
-        body["end"] = {
-            "dateTime": end.isoformat(),
-            "timeZone": tz,
-        }
+        end = start + timedelta(minutes=event.duration_minutes)
     else:
-        body["end"] = body["start"]
+        end = start + timedelta(minutes=DEFAULT_DURATION)
+
+    body["end"] = {
+        "dateTime": end.isoformat(),
+        "timeZone": settings.timezone,
+    }
 
     if event.location:
         body["location"] = event.location

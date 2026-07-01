@@ -1,5 +1,6 @@
-import base64
 import json
+import os
+import tempfile
 
 import pytest
 
@@ -20,13 +21,17 @@ def minimal_settings(**overrides) -> Settings:
         "telegram_bot_token": "123:ABC",
         "openrouter_api_key": "sk-or-v1-test",
         "openai_api_key": "sk-test",
-        "google_service_account_json": json.dumps(SAMPLE_CREDENTIALS),
         "google_calendar_id": "test@group.calendar.google.com",
         "bot_webhook_url": "https://example.com",
         "bot_port": 8443,
         "timezone": "Europe/Berlin",
     }
     defaults.update(overrides)
+    if "google_service_account_file" not in overrides:
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        json.dump(SAMPLE_CREDENTIALS, tmp)
+        tmp.close()
+        defaults["google_service_account_file"] = tmp.name
     return Settings(**defaults)
 
 
@@ -43,21 +48,22 @@ class TestSettings:
         s = minimal_settings()
         assert s.webhook_path == "123:ABC"
 
-    def test_google_credentials_from_raw_json(self):
+    def test_google_credentials_from_file(self):
         s = minimal_settings()
         creds = s.google_credentials
         assert creds["client_email"] == "test@test-project.iam.gserviceaccount.com"
+        assert creds["project_id"] == "test-project"
 
-    def test_google_credentials_from_base64(self):
-        encoded = base64.b64encode(json.dumps(SAMPLE_CREDENTIALS).encode()).decode()
-        s = minimal_settings(google_service_account_json=encoded)
+    def test_google_credentials_custom_path(self):
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        json.dump(
+            {"client_email": "custom@project.iam.gserviceaccount.com", "project_id": "custom"},
+            tmp,
+        )
+        tmp.close()
+        s = minimal_settings(google_service_account_file=tmp.name)
         creds = s.google_credentials
-        assert creds["client_email"] == "test@test-project.iam.gserviceaccount.com"
-
-    def test_google_credentials_with_whitespace(self):
-        s = minimal_settings(google_service_account_json="  " + json.dumps(SAMPLE_CREDENTIALS) + "  ")
-        creds = s.google_credentials
-        assert creds["client_email"] == "test@test-project.iam.gserviceaccount.com"
+        assert creds["client_email"] == "custom@project.iam.gserviceaccount.com"
 
     def test_default_port(self):
         s = minimal_settings()
