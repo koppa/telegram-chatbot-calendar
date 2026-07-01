@@ -21,7 +21,6 @@ with open(_creds_path, "w") as f:
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "123:TESTTOKEN")
 os.environ.setdefault("OPENROUTER_API_KEY", "sk-or-v1-test")
-os.environ.setdefault("OPENAI_API_KEY", "sk-test")
 os.environ.setdefault("GOOGLE_SERVICE_ACCOUNT_FILE", _creds_path)
 os.environ.setdefault("GOOGLE_CALENDAR_ID", "test@group.calendar.google.com")
 os.environ.setdefault("BOT_WEBHOOK_URL", "https://example.com")

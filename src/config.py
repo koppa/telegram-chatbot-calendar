@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str
     openrouter_model: str = "openai/gpt-4o"
     openrouter_extract_model: str = "openai/gpt-4o-mini"
-    openai_api_key: str
+    openrouter_stt_model: str = "openai/whisper-1"
     google_service_account_file: str = "service-account.json"
     google_calendar_id: str
     bot_use_webhook: bool = False
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     def webhook_path(self) -> str:
         return self.telegram_bot_token
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()

@@ -9,7 +9,7 @@ A Python bot that receives Telegram messages (text, photo, voice/audio), extract
 | Language | Python 3.11+ |
 | Telegram | [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) v21+ (async) |
 | Image Analysis | OpenRouter Vision API (`openai/gpt-4o`) |
-| Audio Transcription | OpenAI Whisper API |
+| Audio Transcription | OpenRouter Whisper API (`openai/whisper-1`) |
 | LLM Extraction | OpenRouter text model with JSON output |
 | Calendar API | Google Calendar API v3 (Service Account) |
 | Container | Docker + docker-compose |
@@ -21,7 +21,7 @@ Telegram User
   │
   ├─ Text ──────────────────────┐
   ├─ Photo ──► OpenRouter Vision ──► text ──┤
-  ├─ Voice ──► Whisper API ────────► text ──┤
+  ├─ Voice ──► OpenRouter Whisper ────► text ──┤
   └─ Document (image) ──► OpenRouter Vision ──► text ──┤
                                                          │
                                LLM Structured Extraction ◄─┘
@@ -35,8 +35,7 @@ Telegram User
 
 1. **Telegram Bot Token** – Create a bot via [@BotFather](https://t.me/BotFather)
 2. **OpenRouter API Key** – Sign up at [openrouter.ai](https://openrouter.ai)
-3. **OpenAI API Key** – For Whisper transcription at [platform.openai.com](https://platform.openai.com)
-4. **Google Cloud Project + Service Account**:
+3. **Google Cloud Project + Service Account**:
    - Create a project in the [Google Cloud Console](https://console.cloud.google.com)
    - Enable the Google Calendar API
    - Create a service account, download the JSON key
@@ -67,7 +66,7 @@ cp .env.example .env
 | `OPENROUTER_API_KEY` | API key from OpenRouter |
 | `OPENROUTER_MODEL` | Vision model (default: `openai/gpt-4o`) |
 | `OPENROUTER_EXTRACT_MODEL` | Extraction model (default: `openai/gpt-4o-mini`) |
-| `OPENAI_API_KEY` | API key for Whisper transcription |
+| `OPENROUTER_STT_MODEL` | Speech-to-text model (default: `openai/whisper-1`) |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | Path to the service account JSON file |
 | `GOOGLE_CALENDAR_ID` | Shared calendar ID |
 | `BOT_USE_WEBHOOK` | `true` for webhook, `false` for polling (default) |
@@ -150,7 +149,7 @@ python -m pytest tests/ -v
 │   │   └── states.py           # Dialog state constants
 │   ├── services/
 │   │   ├── openrouter.py       # OpenRouter Vision + LLM extraction
-│   │   ├── whisper.py          # OpenAI Whisper transcription
+│   │   ├── whisper.py          # OpenRouter Whisper transcription
 │   │   └── calendar.py         # Google Calendar API
 │   └── models/
 │       └── event.py            # CalendarEvent Pydantic model

@@ -20,7 +20,6 @@ def minimal_settings(**overrides) -> Settings:
     defaults = {
         "telegram_bot_token": "123:ABC",
         "openrouter_api_key": "sk-or-v1-test",
-        "openai_api_key": "sk-test",
         "google_calendar_id": "test@group.calendar.google.com",
         "bot_webhook_url": "https://example.com",
         "bot_port": 8443,
