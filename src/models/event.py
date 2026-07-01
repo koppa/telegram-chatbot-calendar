@@ -10,3 +10,4 @@ class CalendarEvent(BaseModel):
     duration_minutes: Optional[int] = None
     location: Optional[str] = None
     description: Optional[str] = None
+    is_all_day: bool = False

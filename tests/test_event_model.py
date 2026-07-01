@@ -52,3 +52,13 @@ class TestCalendarEvent:
         assert "end_datetime" not in data
         assert "duration_minutes" not in data
         assert "location" not in data
+
+    def test_all_day_event(self):
+        event = CalendarEvent(
+            summary="Ganztägig",
+            start_datetime=datetime(2026, 7, 2),
+            is_all_day=True,
+        )
+        assert event.is_all_day is True
+        assert event.start_datetime.hour == 0
+        assert event.start_datetime.minute == 0

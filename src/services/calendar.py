@@ -35,26 +35,33 @@ def _get_service():
 async def create_event(event: CalendarEvent) -> str:
     service = _get_service()
 
-    start = _localize(event.start_datetime)
-    body = {
-        "summary": event.summary,
-        "start": {
+    body = {"summary": event.summary}
+
+    if event.is_all_day:
+        body["start"] = {"date": event.start_datetime.date().isoformat()}
+        if event.end_datetime and event.end_datetime.date() != event.start_datetime.date():
+            end_date = event.end_datetime.date() + timedelta(days=1)
+        else:
+            end_date = event.start_datetime.date() + timedelta(days=1)
+        body["end"] = {"date": end_date.isoformat()}
+    else:
+        start = _localize(event.start_datetime)
+        body["start"] = {
             "dateTime": start.isoformat(),
             "timeZone": settings.timezone,
-        },
-    }
+        }
 
-    if event.end_datetime:
-        end = _localize(event.end_datetime)
-    elif event.duration_minutes:
-        end = start + timedelta(minutes=event.duration_minutes)
-    else:
-        end = start + timedelta(minutes=DEFAULT_DURATION)
+        if event.end_datetime:
+            end = _localize(event.end_datetime)
+        elif event.duration_minutes:
+            end = start + timedelta(minutes=event.duration_minutes)
+        else:
+            end = start + timedelta(minutes=DEFAULT_DURATION)
 
-    body["end"] = {
-        "dateTime": end.isoformat(),
-        "timeZone": settings.timezone,
-    }
+        body["end"] = {
+            "dateTime": end.isoformat(),
+            "timeZone": settings.timezone,
+        }
 
     if event.location:
         body["location"] = event.location

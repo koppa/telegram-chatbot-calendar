@@ -54,6 +54,20 @@ FAKE_EXTRACT_EMPTY_RESPONSE = {
     ]
 }
 
+FAKE_EXTRACT_ALL_DAY_RESPONSE = {
+    "choices": [
+        {
+            "message": {
+                "content": json.dumps({
+                    "summary": "Ganztägiger Termin",
+                    "start_datetime": "2026-07-02T00:00:00",
+                    "is_all_day": True,
+                })
+            }
+        }
+    ]
+}
+
 
 @pytest.fixture
 def mock_openrouter_request():
@@ -128,3 +142,11 @@ class TestExtractEvent:
         await extract_event("test", today="2026-07-01")
         body = mock_openrouter_request.call_args[0][0]
         assert body["response_format"] == {"type": "json_object"}
+
+    async def test_parses_all_day_event(self, mock_openrouter_request):
+        mock_openrouter_request.return_value = FAKE_EXTRACT_ALL_DAY_RESPONSE
+        result = await extract_event("Ganztägiger Termin morgen", today="2026-07-01")
+        assert result is not None
+        assert result.summary == "Ganztägiger Termin"
+        assert result.is_all_day is True
+        assert result.start_datetime is not None

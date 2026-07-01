@@ -106,6 +106,7 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
         "duration_minutes": event.duration_minutes,
         "location": event.location,
         "description": event.description,
+        "is_all_day": event.is_all_day,
     }
 
     if not event.summary and event.start_datetime:
@@ -132,13 +133,8 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
         )
         return AWAITING_DATE
 
-    if event.start_datetime.time() == datetime.min.time():
-        context.user_data["partial_event"] = {k: v for k, v in partial.items() if v is not None}
-        await update.message.reply_text(
-            f"Ich habe das Datum ({event.start_datetime.date()}) erkannt, "
-            "aber zu welcher Uhrzeit?"
-        )
-        return AWAITING_TIME
+    if event.start_datetime.time() == datetime.min.time() and not event.is_all_day:
+        event.is_all_day = True
 
     return await _confirm_and_create(update, context, event)
 
@@ -179,6 +175,8 @@ async def handle_awaiting_date(update: Update, context: ContextTypes.DEFAULT_TYP
             partial["location"] = event.location
         if event.description:
             partial["description"] = event.description
+        if event.is_all_day:
+            partial["is_all_day"] = True
 
     if not partial.get("summary"):
         await update.message.reply_text(
@@ -194,12 +192,8 @@ async def handle_awaiting_date(update: Update, context: ContextTypes.DEFAULT_TYP
         return AWAITING_DATE
 
     start_dt = datetime.fromisoformat(partial["start_datetime"])
-    if start_dt.time() == datetime.min.time():
-        await update.message.reply_text(
-            f"Ich habe das Datum ({start_dt.date()}) erkannt, "
-            "aber zu welcher Uhrzeit?"
-        )
-        return AWAITING_TIME
+    if start_dt.time() == datetime.min.time() and not partial.get("is_all_day"):
+        partial["is_all_day"] = True
 
     full_event = CalendarEvent.model_validate(partial)
     return await _confirm_and_create(update, context, full_event)
@@ -240,12 +234,19 @@ async def _confirm_and_create(
 ) -> int:
     lines = [
         f"*{event.summary}*",
-        f"Start: {event.start_datetime.strftime('%d.%m.%Y %H:%M')}",
     ]
-    if event.end_datetime:
-        lines.append(f"Ende: {event.end_datetime.strftime('%d.%m.%Y %H:%M')}")
-    elif event.duration_minutes:
-        lines.append(f"Dauer: {event.duration_minutes} Minuten")
+    if event.is_all_day:
+        lines.append(f"Datum: {event.start_datetime.strftime('%d.%m.%Y')} (ganztägig)")
+        if event.end_datetime:
+            days = (event.end_datetime.date() - event.start_datetime.date()).days
+            if days > 0:
+                lines.append(f"Bis: {event.end_datetime.strftime('%d.%m.%Y')} (ganztägig)")
+    else:
+        lines.append(f"Start: {event.start_datetime.strftime('%d.%m.%Y %H:%M')}")
+        if event.end_datetime:
+            lines.append(f"Ende: {event.end_datetime.strftime('%d.%m.%Y %H:%M')}")
+        elif event.duration_minutes:
+            lines.append(f"Dauer: {event.duration_minutes} Minuten")
     if event.location:
         lines.append(f"Ort: {event.location}")
     if event.description:
@@ -262,7 +263,7 @@ async def _confirm_and_create(
 
 async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text.lower().strip()
-    if text in ("ja", "yes", "y", "ok", "klar", "sicher"):
+    if text in ("ja", "yes", "y", "ok", "klar", "sicher", "\U0001f44d", "thumbs up", "daumen hoch"):
         event_data = context.user_data.get("pending_event")
         if event_data is None:
             await update.message.reply_text("Etwas ist schiefgelaufen. Bitte beginne von vorne.")

@@ -77,3 +77,16 @@ class TestCreateEvent:
         body = mock_service.events.return_value.insert.call_args[1]["body"]
         assert "location" not in body
         assert "description" not in body
+
+    async def test_all_day_event_uses_date_field(self, mock_service):
+        event = CalendarEvent(
+            summary="Ganztägig",
+            start_datetime=datetime(2026, 7, 2),
+            is_all_day=True,
+        )
+        await create_event(event)
+        body = mock_service.events.return_value.insert.call_args[1]["body"]
+        assert body["start"] == {"date": "2026-07-02"}
+        assert body["end"] == {"date": "2026-07-03"}
+        assert "dateTime" not in body["start"]
+        assert "timeZone" not in body["start"]

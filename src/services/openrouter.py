@@ -16,6 +16,7 @@ Return a JSON object with these fields:
 - "duration_minutes": integer (optional, used if end_datetime not specified)
 - "location": string (optional)
 - "description": string (optional)
+- "is_all_day": boolean (optional, default false). Set to true only if the user explicitly says "ganztägig" or "all day" or when they mention a date without any specific time.
 
 Return ONLY valid JSON, no other text."""
 
@@ -100,4 +101,5 @@ async def extract_event(text: str, *, context: str = "", today: str = "") -> Opt
         duration_minutes=parsed.get("duration_minutes"),
         location=parsed.get("location"),
         description=parsed.get("description"),
+        is_all_day=parsed.get("is_all_day", False),
     )
