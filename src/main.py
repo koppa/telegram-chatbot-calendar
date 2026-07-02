@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 async def error_handler(update: Update | None, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.exception("Unhandled error: %s", context.error)
     if update and update.effective_message:
-        await update.effective_message.reply_text(
-            "Ein Fehler ist aufgetreten. Bitte versuche es später erneut."
-        )
+        msg = "Ein Fehler ist aufgetreten. Bitte versuche es später erneut."
+        logger.info("Bot reply: %s", msg)
+        await update.effective_message.reply_text(msg)
 
 
 def main() -> None:

@@ -19,6 +19,18 @@ from src.models.event import CalendarEvent
 logger = logging.getLogger(__name__)
 
 
+def _user_id(update: Update) -> str:
+    user = update.effective_user
+    if not user:
+        return "unknown"
+    return user.username or user.first_name or str(user.id)
+
+
+def _log_received(update: Update, text: str) -> None:
+    preview = text[:100].replace("\n", " ")
+    logger.info("Received from %s: %s", _user_id(update), preview)
+
+
 async def _reply(update: Update, text: str, **kwargs) -> None:
     preview = text[:80].replace("\n", " ")
     logger.info("Bot reply: %s", preview)
@@ -46,6 +58,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text
+    _log_received(update, text)
     return await _process_text(update, context, text)
 
 
@@ -54,6 +67,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     file = await photo.get_file()
     photo_bytes = await file.download_as_bytearray()
     description = await describe_image(bytes(photo_bytes))
+    _log_received(update, f"[photo] {description}")
     return await _process_text(update, context, description)
 
 
@@ -81,6 +95,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     if text is None:
         await _reply(update, "Entschuldigung, die Transkription ist fehlgeschlagen. Bitte versuche es erneut.")
         return WAITING_FOR_INPUT
+    _log_received(update, text)
     return await _process_text(update, context, text)
 
 
@@ -89,6 +104,7 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     if text is None:
         await _reply(update, "Entschuldigung, die Transkription ist fehlgeschlagen. Bitte versuche es erneut.")
         return WAITING_FOR_INPUT
+    _log_received(update, text)
     return await _process_text(update, context, text)
 
 
@@ -98,7 +114,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         file = await doc.get_file()
         image_bytes = await file.download_as_bytearray()
         description = await describe_image(bytes(image_bytes))
+        _log_received(update, f"[document/image] {description}")
         return await _process_text(update, context, description)
+    _log_received(update, f"[document] mime={doc.mime_type}")
     await _reply(update, 
         "Dieser Dateityp wird nicht unterst\u00fctzt. Nutze Text, Bilder oder Sprachnachrichten."
     )
@@ -165,16 +183,18 @@ async def _process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text
 
 async def _get_text(update: Update) -> str:
     if update.message.text:
+        _log_received(update, update.message.text)
         return update.message.text
     if update.message.voice or update.message.audio:
         text = await _transcribe_message(update)
+        if text:
+            _log_received(update, text)
         return text or ""
     return ""
 
 
 async def handle_awaiting_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = await _get_text(update)
-    logger.info("handle_awaiting_date transcribed: %s", text)
     if not text:
         await _reply(update, 
             "Entschuldigung, ich konnte die Sprachnachricht nicht verstehen. Bitte versuche es erneut."
