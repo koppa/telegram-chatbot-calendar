@@ -25,6 +25,7 @@ def main() -> None:
     app = (
         Application.builder()
         .token(settings.telegram_bot_token)
+        .concurrent_updates(1)
         .build()
     )
 
