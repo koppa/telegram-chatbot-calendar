@@ -10,7 +10,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from src.bot.states import WAITING_FOR_INPUT, AWAITING_DATE, AWAITING_TIME, AWAITING_CONFIRMATION
+from src.bot.states import WAITING_FOR_INPUT, AWAITING_DATE, AWAITING_CONFIRMATION
 from src.services.openrouter import describe_image, extract_event
 from src.services.whisper import transcribe_audio
 from src.services.calendar import create_event
@@ -57,28 +57,36 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return await _process_text(update, context, description)
 
 
-async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def _transcribe_message(update: Update) -> str | None:
     try:
-        voice: Voice = update.message.voice
-        file = await voice.get_file()
-        audio_bytes = await file.download_as_bytearray()
-        text = await transcribe_audio(bytes(audio_bytes))
+        if update.message.voice:
+            voice: Voice = update.message.voice
+            file = await voice.get_file()
+            audio_bytes = await file.download_as_bytearray()
+            return await transcribe_audio(bytes(audio_bytes))
+        if update.message.audio:
+            audio: Audio = update.message.audio
+            file = await audio.get_file()
+            audio_bytes = await file.download_as_bytearray()
+            filename = audio.file_name or "audio.ogg"
+            return await transcribe_audio(bytes(audio_bytes), filename=filename)
     except Exception as e:
         logger.warning("Transcription failed: %s", e)
+        return None
+    return None
+
+
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = await _transcribe_message(update)
+    if text is None:
         await _reply(update, "Entschuldigung, die Transkription ist fehlgeschlagen. Bitte versuche es erneut.")
         return WAITING_FOR_INPUT
     return await _process_text(update, context, text)
 
 
 async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        audio: Audio = update.message.audio
-        file = await audio.get_file()
-        audio_bytes = await file.download_as_bytearray()
-        filename = audio.file_name or "audio.ogg"
-        text = await transcribe_audio(bytes(audio_bytes), filename=filename)
-    except Exception as e:
-        logger.warning("Transcription failed: %s", e)
+    text = await _transcribe_message(update)
+    if text is None:
         await _reply(update, "Entschuldigung, die Transkription ist fehlgeschlagen. Bitte versuche es erneut.")
         return WAITING_FOR_INPUT
     return await _process_text(update, context, text)
@@ -159,21 +167,8 @@ async def _get_text(update: Update) -> str:
     if update.message.text:
         return update.message.text
     if update.message.voice or update.message.audio:
-        try:
-            if update.message.voice:
-                voice: Voice = update.message.voice
-                file = await voice.get_file()
-                audio_bytes = await file.download_as_bytearray()
-                return await transcribe_audio(bytes(audio_bytes))
-            else:
-                audio: Audio = update.message.audio
-                file = await audio.get_file()
-                audio_bytes = await file.download_as_bytearray()
-                filename = audio.file_name or "audio.ogg"
-                return await transcribe_audio(bytes(audio_bytes), filename=filename)
-        except Exception as e:
-            logger.warning("Transcription failed: %s", e)
-            return ""
+        text = await _transcribe_message(update)
+        return text or ""
     return ""
 
 
@@ -238,41 +233,6 @@ async def handle_awaiting_date(update: Update, context: ContextTypes.DEFAULT_TYP
     start_dt = datetime.fromisoformat(partial["start_datetime"])
     if start_dt.time() == datetime.min.time() and not partial.get("is_all_day"):
         partial["is_all_day"] = True
-
-    full_event = CalendarEvent.model_validate(partial)
-    return await _confirm_and_create(update, context, full_event)
-
-
-async def handle_awaiting_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = await _get_text(update)
-    if not text:
-        await _reply(update, 
-            "Entschuldigung, ich konnte die Sprachnachricht nicht verstehen. Bitte versuche es erneut."
-        )
-        return AWAITING_TIME
-    partial = context.user_data.get("partial_event", {})
-
-    context_str = ""
-    if partial.get("summary"):
-        context_str = f"Title: {partial['summary']}. Date: {partial.get('start_datetime', 'unknown')}."
-
-    event = await extract_event(
-        text,
-        context=context_str,
-        today=_today_str(),
-    )
-    if event is None or event.start_datetime is None or event.start_datetime.time() == datetime.min.time():
-        await _reply(update, 
-            "Ich konnte die Uhrzeit leider nicht verstehen. "
-            "Bitte gib sie an wie \u201e15 Uhr\u201c oder \u201e14:30\u201c."
-        )
-        return AWAITING_TIME
-
-    partial["start_datetime"] = event.start_datetime.isoformat()
-    if event.end_datetime:
-        partial["end_datetime"] = event.end_datetime.isoformat()
-    if event.duration_minutes:
-        partial["duration_minutes"] = event.duration_minutes
 
     full_event = CalendarEvent.model_validate(partial)
     return await _confirm_and_create(update, context, full_event)
@@ -363,11 +323,6 @@ def get_conversation_handler() -> ConversationHandler:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_awaiting_date),
                 MessageHandler(filters.VOICE, handle_awaiting_date),
                 MessageHandler(filters.AUDIO, handle_awaiting_date),
-            ],
-            AWAITING_TIME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_awaiting_time),
-                MessageHandler(filters.VOICE, handle_awaiting_time),
-                MessageHandler(filters.AUDIO, handle_awaiting_time),
             ],
             AWAITING_CONFIRMATION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_confirmation),
