@@ -11,7 +11,7 @@ from telegram.ext import (
 )
 
 from src.bot.states import WAITING_FOR_INPUT, AWAITING_DATE, AWAITING_CONFIRMATION
-from src.services.openrouter import describe_image, extract_event
+from src.services.openrouter import describe_image, extract_event, modify_event
 from src.services.whisper import transcribe_audio
 from src.services.calendar import create_event
 from src.models.event import CalendarEvent
@@ -71,38 +71,49 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return await _process_text(update, context, description)
 
 
-async def _transcribe_message(update: Update) -> str | None:
+async def _transcribe_message(update: Update) -> tuple[str | None, str | None]:
     try:
         if update.message.voice:
             voice: Voice = update.message.voice
             file = await voice.get_file()
             audio_bytes = await file.download_as_bytearray()
-            return await transcribe_audio(bytes(audio_bytes))
+            text = await transcribe_audio(bytes(audio_bytes))
+            return text, None
         if update.message.audio:
             audio: Audio = update.message.audio
             file = await audio.get_file()
             audio_bytes = await file.download_as_bytearray()
             filename = audio.file_name or "audio.ogg"
-            return await transcribe_audio(bytes(audio_bytes), filename=filename)
+            text = await transcribe_audio(bytes(audio_bytes), filename=filename)
+            return text, None
     except Exception as e:
-        logger.warning("Transcription failed: %s", e)
-        return None
-    return None
+        error_msg = f"{type(e).__name__}: {e}" if str(e) else f"{type(e).__name__}"
+        logger.warning("Transcription failed: %s", error_msg)
+        return None, error_msg
+    return None, None
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = await _transcribe_message(update)
+    text, error = await _transcribe_message(update)
     if text is None:
-        await _reply(update, "Entschuldigung, die Transkription ist fehlgeschlagen. Bitte versuche es erneut.")
+        if error and ("Netzwerk" in error or "API" in error):
+            msg = f"Entschuldigung, die Transkription ist fehlgeschlagen ({error}). Bitte versuche es später erneut."
+        else:
+            msg = f"Entschuldigung, die Transkription ist fehlgeschlagen. Bitte versuche es erneut."
+        await _reply(update, msg)
         return WAITING_FOR_INPUT
     _log_received(update, text)
     return await _process_text(update, context, text)
 
 
 async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = await _transcribe_message(update)
+    text, error = await _transcribe_message(update)
     if text is None:
-        await _reply(update, "Entschuldigung, die Transkription ist fehlgeschlagen. Bitte versuche es erneut.")
+        if error and ("Netzwerk" in error or "API" in error):
+            msg = f"Entschuldigung, die Transkription ist fehlgeschlagen ({error}). Bitte versuche es später erneut."
+        else:
+            msg = f"Entschuldigung, die Transkription ist fehlgeschlagen. Bitte versuche es erneut."
+        await _reply(update, msg)
         return WAITING_FOR_INPUT
     _log_received(update, text)
     return await _process_text(update, context, text)
@@ -186,7 +197,7 @@ async def _get_text(update: Update) -> str:
         _log_received(update, update.message.text)
         return update.message.text
     if update.message.voice or update.message.audio:
-        text = await _transcribe_message(update)
+        text, _ = await _transcribe_message(update)
         if text:
             _log_received(update, text)
         return text or ""
@@ -238,10 +249,13 @@ async def handle_awaiting_date(update: Update, context: ContextTypes.DEFAULT_TYP
             partial["is_all_day"] = True
 
     if not partial.get("summary"):
-        await _reply(update, 
-            f"Ich konnte keinen Titel in \u201e{text}\u201c erkennen. Wie soll der Termin hei\u00dfen?"
-        )
-        return AWAITING_DATE
+        if partial.get("start_datetime"):
+            partial["summary"] = text.strip()
+        else:
+            await _reply(update, 
+                f"Ich konnte keinen Titel in \u201e{text}\u201c erkennen. Wie soll der Termin hei\u00dfen?"
+            )
+            return AWAITING_DATE
 
     if not partial.get("start_datetime"):
         await _reply(update, 
@@ -315,10 +329,45 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
             await _reply(update, 
                 "Der Termin konnte nicht erstellt werden. Bitte sp\u00e4ter erneut versuchen."
             )
-    else:
+        context.user_data.clear()
+        return WAITING_FOR_INPUT
+    if text in ("nein", "no", "n", "nicht", "ne"):
         await _reply(update, "OK, Termin nicht erstellt.")
-    context.user_data.clear()
-    return WAITING_FOR_INPUT
+        context.user_data.clear()
+        return WAITING_FOR_INPUT
+
+    event_data = context.user_data.get("pending_event")
+    if event_data is None:
+        await _reply(update, "Etwas ist schiefgelaufen. Bitte beginne von vorne.")
+        return WAITING_FOR_INPUT
+
+    await _reply(update, "Einen Moment, ich \u00fcberlege, wie ich den Termin anpassen soll ...")
+    modifications = await modify_event(event_data, update.message.text or text, today=_today_str())
+    if modifications is None:
+        await _reply(update, 
+            "Entschuldigung, ich habe deine \u00c4nderungsw\u00fcnsche nicht verstanden. "
+            "Soll ich den Termin wie gehabt erstellen? (Ja/Nein)"
+        )
+        return AWAITING_CONFIRMATION
+
+    for field in ("summary", "start_datetime", "end_datetime", "duration_minutes", "location", "description", "is_all_day"):
+        if field in modifications:
+            event_data[field] = modifications[field]
+
+    try:
+        if modifications.get("start_datetime"):
+            start_dt = datetime.fromisoformat(modifications["start_datetime"])
+            if start_dt.time() == datetime.min.time() and not event_data.get("is_all_day"):
+                event_data["is_all_day"] = True
+    except (ValueError, TypeError):
+        pass
+
+    if modifications.get("end_datetime") is None and "end_datetime" in modifications:
+        event_data.pop("end_datetime", None)
+
+    merged = CalendarEvent.model_validate(event_data)
+    context.user_data["pending_event"] = merged.model_dump()
+    return await _confirm_and_create(update, context, merged)
 
 
 def get_conversation_handler() -> ConversationHandler:

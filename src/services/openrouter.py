@@ -8,6 +8,26 @@ from src.config import settings
 from src.models.event import CalendarEvent
 
 
+SYSTEM_MODIFY_PROMPT = """You are a calendar event editor. The user wants to modify a previously proposed calendar event. Interpret their request and return the updated event.
+
+Current event (JSON):
+{current_event}
+
+User's modification request: {user_request}
+
+Return a JSON object with these fields. Only include fields that should change — unchanged fields can be omitted or set to their current value:
+- "summary": event title (string)
+- "start_datetime": ISO 8601 datetime string
+- "end_datetime": ISO 8601 datetime string (optional)
+- "duration_minutes": integer (optional)
+- "location": string (optional)
+- "description": string (optional)
+- "is_all_day": boolean (optional)
+
+If the user's request cannot be interpreted as a modification (e.g., unrelated chat), set "unclear": true.
+
+Return ONLY valid JSON, no other text."""
+
 SYSTEM_EXTRACT_PROMPT = """You are a calendar event parser. Extract event information from the user's message.
 Return a JSON object with these fields:
 - "summary": event title (string, required). If no clear title is given, set this to null.
@@ -103,3 +123,35 @@ async def extract_event(text: str, *, context: str = "", today: str = "") -> Opt
         description=parsed.get("description"),
         is_all_day=parsed.get("is_all_day", False),
     )
+
+
+async def modify_event(current_event: dict, user_request: str, today: str = "") -> dict | None:
+    serializable = {}
+    for key, value in current_event.items():
+        if isinstance(value, datetime):
+            serializable[key] = value.isoformat()
+        else:
+            serializable[key] = value
+
+    prompt = SYSTEM_MODIFY_PROMPT.format(
+        current_event=json.dumps(serializable, indent=2, ensure_ascii=False),
+        user_request=user_request,
+    )
+    if today:
+        prompt += f"\n\nToday's date: {today}"
+
+    body = {
+        "model": settings.openrouter_extract_model,
+        "messages": [
+            {"role": "system", "content": prompt},
+        ],
+        "response_format": {"type": "json_object"},
+    }
+    data = await _openrouter_request(body)
+    raw = data["choices"][0]["message"]["content"]
+    parsed = json.loads(raw)
+
+    if parsed.get("unclear"):
+        return None
+
+    return parsed

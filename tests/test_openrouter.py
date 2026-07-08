@@ -1,9 +1,10 @@
 import json
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.services.openrouter import describe_image, extract_event
+from src.services.openrouter import describe_image, extract_event, modify_event
 from src.models.event import CalendarEvent
 
 
@@ -66,6 +67,54 @@ FAKE_EXTRACT_ALL_DAY_RESPONSE = {
             }
         }
     ]
+}
+
+FAKE_MODIFY_RESCHEDULE_RESPONSE = {
+    "choices": [
+        {
+            "message": {
+                "content": json.dumps({
+                    "start_datetime": "2026-07-02T16:00:00",
+                    "end_datetime": "2026-07-02T17:00:00",
+                })
+            }
+        }
+    ]
+}
+
+FAKE_MODIFY_CHANGE_TITLE_RESPONSE = {
+    "choices": [
+        {
+            "message": {
+                "content": json.dumps({
+                    "summary": "Meeting mit Team",
+                    "location": "Büro Berlin",
+                })
+            }
+        }
+    ]
+}
+
+FAKE_MODIFY_UNCLEAR_RESPONSE = {
+    "choices": [
+        {
+            "message": {
+                "content": json.dumps({
+                    "unclear": True,
+                })
+            }
+        }
+    ]
+}
+
+FAKE_MODIFY_WITH_DATETIME_OBJ_CURRENT = {
+    "summary": "Medikamente nehmen",
+    "start_datetime": "2026-07-09T07:00:00",
+    "end_datetime": None,
+    "duration_minutes": 15,
+    "location": None,
+    "description": None,
+    "is_all_day": False,
 }
 
 
@@ -150,3 +199,66 @@ class TestExtractEvent:
         assert result.summary == "Ganztägiger Termin"
         assert result.is_all_day is True
         assert result.start_datetime is not None
+
+
+class TestModifyEvent:
+    CURRENT = {
+        "summary": "Zahnarzttermin",
+        "start_datetime": "2026-07-02T10:00:00",
+        "end_datetime": "2026-07-02T11:00:00",
+        "location": "Praxis Dr. Müller",
+        "description": "Jährliche Kontrolle",
+    }
+
+    async def test_reschedules_event(self, mock_openrouter_request):
+        mock_openrouter_request.return_value = FAKE_MODIFY_RESCHEDULE_RESPONSE
+        result = await modify_event(self.CURRENT, "Verschiebe auf 16 Uhr", today="2026-07-01")
+        assert result is not None
+        assert result["start_datetime"] == "2026-07-02T16:00:00"
+        assert result["end_datetime"] == "2026-07-02T17:00:00"
+
+    async def test_changes_title_and_location(self, mock_openrouter_request):
+        mock_openrouter_request.return_value = FAKE_MODIFY_CHANGE_TITLE_RESPONSE
+        result = await modify_event(self.CURRENT, "Nenn es Meeting mit Team, im Büro Berlin")
+        assert result is not None
+        assert result["summary"] == "Meeting mit Team"
+        assert result["location"] == "Büro Berlin"
+
+    async def test_returns_none_on_unclear(self, mock_openrouter_request):
+        mock_openrouter_request.return_value = FAKE_MODIFY_UNCLEAR_RESPONSE
+        result = await modify_event(self.CURRENT, "blabla wasweißich", today="2026-07-01")
+        assert result is None
+
+    async def test_includes_current_event_in_prompt(self, mock_openrouter_request):
+        mock_openrouter_request.return_value = FAKE_MODIFY_RESCHEDULE_RESPONSE
+        await modify_event(self.CURRENT, "später", today="2026-07-01")
+        body = mock_openrouter_request.call_args[0][0]
+        system_msg = body["messages"][0]["content"]
+        assert "Zahnarzttermin" in system_msg
+        assert "Praxis Dr. Müller" in system_msg
+
+    async def test_includes_today_in_prompt(self, mock_openrouter_request):
+        mock_openrouter_request.return_value = FAKE_MODIFY_RESCHEDULE_RESPONSE
+        await modify_event(self.CURRENT, "morgen", today="2026-07-01")
+        body = mock_openrouter_request.call_args[0][0]
+        system_msg = body["messages"][0]["content"]
+        assert "2026-07-01" in system_msg
+
+    async def test_uses_json_response_format(self, mock_openrouter_request):
+        mock_openrouter_request.return_value = FAKE_MODIFY_RESCHEDULE_RESPONSE
+        await modify_event(self.CURRENT, "später")
+        body = mock_openrouter_request.call_args[0][0]
+        assert body["response_format"] == {"type": "json_object"}
+
+    async def test_handles_datetime_objects_in_input(self, mock_openrouter_request):
+        mock_openrouter_request.return_value = FAKE_MODIFY_RESCHEDULE_RESPONSE
+        event_with_dt = {
+            "summary": "Test",
+            "start_datetime": datetime(2026, 7, 9, 7, 0),
+            "end_datetime": datetime(2026, 7, 9, 8, 0),
+        }
+        result = await modify_event(event_with_dt, "um 9 Uhr", today="2026-07-08")
+        assert result is not None
+        body = mock_openrouter_request.call_args[0][0]
+        system_msg = body["messages"][0]["content"]
+        assert "2026-07-09T07:00:00" in system_msg
