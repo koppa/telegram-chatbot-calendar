@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, date
 
 from telegram import Update, Document, PhotoSize, Voice, Audio
+from telegram.helpers import escape_markdown
 from telegram.ext import (
     ConversationHandler,
     CommandHandler,
@@ -275,8 +276,9 @@ async def handle_awaiting_date(update: Update, context: ContextTypes.DEFAULT_TYP
 async def _confirm_and_create(
     update: Update, context: ContextTypes.DEFAULT_TYPE, event: CalendarEvent
 ) -> int:
+    summary = escape_markdown(event.summary, version=1)
     lines = [
-        f"*{event.summary}*",
+        f"*{summary}*",
     ]
     if event.is_all_day:
         lines.append(f"Datum: {event.start_datetime.strftime('%d.%m.%Y')} (ganztägig)")
@@ -291,9 +293,9 @@ async def _confirm_and_create(
         elif event.duration_minutes:
             lines.append(f"Dauer: {event.duration_minutes} Minuten")
     if event.location:
-        lines.append(f"Ort: {event.location}")
+        lines.append(f"Ort: {escape_markdown(event.location, version=1)}")
     if event.description:
-        lines.append(f"Beschreibung: {event.description}")
+        lines.append(f"Beschreibung: {escape_markdown(event.description, version=1)}")
 
     await _reply(update, 
         f"Ich habe folgende Informationen extrahiert:\n\n" + "\n".join(lines) +

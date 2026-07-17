@@ -6,7 +6,7 @@ A Python bot that receives Telegram messages (text, photo, voice/audio), extract
 
 | Component | Technology |
 |---|---|
-| Language | Python 3.11+ |
+| Language | Python 3.13+ |
 | Telegram | [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) v21+ (async) |
 | Image Analysis | OpenRouter Vision API (`openai/gpt-4o`) |
 | Audio Transcription | OpenRouter Whisper API (`openai/whisper-large-v3`) |
