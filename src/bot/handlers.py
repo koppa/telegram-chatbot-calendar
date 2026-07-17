@@ -94,7 +94,7 @@ async def _transcribe_message(update: Update) -> tuple[str | None, str | None]:
     return None, None
 
 
-async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def _route_transcription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text, error = await _transcribe_message(update)
     if text is None:
         if error and ("Netzwerk" in error or "API" in error):
@@ -107,17 +107,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return await _process_text(update, context, text)
 
 
-async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text, error = await _transcribe_message(update)
-    if text is None:
-        if error and ("Netzwerk" in error or "API" in error):
-            msg = f"Entschuldigung, die Transkription ist fehlgeschlagen ({error}). Bitte versuche es später erneut."
-        else:
-            msg = f"Entschuldigung, die Transkription ist fehlgeschlagen. Bitte versuche es erneut."
-        await _reply(update, msg)
-        return WAITING_FOR_INPUT
-    _log_received(update, text)
-    return await _process_text(update, context, text)
+handle_voice = _route_transcription
+handle_audio = _route_transcription
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -276,7 +267,7 @@ async def handle_awaiting_date(update: Update, context: ContextTypes.DEFAULT_TYP
 async def _confirm_and_create(
     update: Update, context: ContextTypes.DEFAULT_TYPE, event: CalendarEvent
 ) -> int:
-    summary = escape_markdown(event.summary, version=1)
+    summary = escape_markdown(event.summary, version=2)
     lines = [
         f"*{summary}*",
     ]
@@ -293,14 +284,14 @@ async def _confirm_and_create(
         elif event.duration_minutes:
             lines.append(f"Dauer: {event.duration_minutes} Minuten")
     if event.location:
-        lines.append(f"Ort: {escape_markdown(event.location, version=1)}")
+        lines.append(f"Ort: {escape_markdown(event.location, version=2)}")
     if event.description:
-        lines.append(f"Beschreibung: {escape_markdown(event.description, version=1)}")
+        lines.append(f"Beschreibung: {escape_markdown(event.description, version=2)}")
 
     await _reply(update, 
         f"Ich habe folgende Informationen extrahiert:\n\n" + "\n".join(lines) +
         "\n\nSoll ich den Termin erstellen? (Ja/Nein)",
-        parse_mode="Markdown",
+        parse_mode="MarkdownV2",
     )
     context.user_data["pending_event"] = event.model_dump()
     return AWAITING_CONFIRMATION
@@ -322,10 +313,10 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         event = CalendarEvent.model_validate(event_data)
         try:
             link = await create_event(event)
-            msg = f"Termin *{event.summary}* wurde erfolgreich erstellt!"
+            msg = f"Termin *{escape_markdown(event.summary, version=2)}* wurde erfolgreich erstellt!"
             if link:
                 msg += f"\n\nIm Kalender ansehen: {link}"
-            await _reply(update, msg, parse_mode="Markdown")
+            await _reply(update, msg, parse_mode="MarkdownV2")
         except Exception as e:
             logger.exception("Failed to create event")
             await _reply(update, 
