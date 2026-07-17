@@ -272,17 +272,17 @@ async def _confirm_and_create(
         f"*{summary}*",
     ]
     if event.is_all_day:
-        lines.append(f"Datum: {event.start_datetime.strftime('%d.%m.%Y')} (ganztägig)")
+        lines.append(f"Datum: {escape_markdown(event.start_datetime.strftime('%d.%m.%Y'), version=2)} \\(ganztägig\\)")
         if event.end_datetime:
             days = (event.end_datetime.date() - event.start_datetime.date()).days
             if days > 0:
-                lines.append(f"Bis: {event.end_datetime.strftime('%d.%m.%Y')} (ganztägig)")
+                lines.append(f"Bis: {escape_markdown(event.end_datetime.strftime('%d.%m.%Y'), version=2)} \\(ganztägig\\)")
     else:
-        lines.append(f"Start: {event.start_datetime.strftime('%d.%m.%Y %H:%M')}")
+        lines.append(f"Start: {escape_markdown(event.start_datetime.strftime('%d.%m.%Y %H:%M'), version=2)}")
         if event.end_datetime:
-            lines.append(f"Ende: {event.end_datetime.strftime('%d.%m.%Y %H:%M')}")
+            lines.append(f"Ende: {escape_markdown(event.end_datetime.strftime('%d.%m.%Y %H:%M'), version=2)}")
         elif event.duration_minutes:
-            lines.append(f"Dauer: {event.duration_minutes} Minuten")
+            lines.append(f"Dauer: {escape_markdown(str(event.duration_minutes), version=2)} Minuten")
     if event.location:
         lines.append(f"Ort: {escape_markdown(event.location, version=2)}")
     if event.description:
@@ -290,7 +290,7 @@ async def _confirm_and_create(
 
     await _reply(update, 
         f"Ich habe folgende Informationen extrahiert:\n\n" + "\n".join(lines) +
-        "\n\nSoll ich den Termin erstellen? (Ja/Nein)",
+        "\n\nSoll ich den Termin erstellen? \\(Ja/Nein\\)",
         parse_mode="MarkdownV2",
     )
     context.user_data["pending_event"] = event.model_dump()
@@ -313,9 +313,9 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
         event = CalendarEvent.model_validate(event_data)
         try:
             link = await create_event(event)
-            msg = f"Termin *{escape_markdown(event.summary, version=2)}* wurde erfolgreich erstellt!"
+            msg = f"Termin *{escape_markdown(event.summary, version=2)}* wurde erfolgreich erstellt\\!"
             if link:
-                msg += f"\n\nIm Kalender ansehen: {link}"
+                msg += f"\n\n[Im Kalender ansehen]({link})"
             await _reply(update, msg, parse_mode="MarkdownV2")
         except Exception as e:
             logger.exception("Failed to create event")
