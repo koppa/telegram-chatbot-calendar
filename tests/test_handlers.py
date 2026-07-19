@@ -2,8 +2,16 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from telegram.ext import ConversationHandler
 
-from src.bot.handlers import handle_confirmation, _confirm_and_create
+from src.config import settings
+from src.bot.handlers import (
+    _is_authorized,
+    handle_confirmation,
+    handle_text,
+    start,
+    _confirm_and_create,
+)
 
 
 def _make_update(text: str | None = None, voice: bool = False) -> MagicMock:
@@ -18,6 +26,7 @@ def _make_update(text: str | None = None, voice: bool = False) -> MagicMock:
         msg.voice = None
         msg.audio = None
     msg.effective_user = MagicMock()
+    msg.effective_user.id = 12345
     msg.effective_user.username = "testuser"
     update.message = msg
     update.effective_user = msg.effective_user
@@ -39,6 +48,55 @@ PENDING_EVENT = {
     "description": None,
     "is_all_day": False,
 }
+
+
+class TestAuthorization:
+    async def test_unauthorized_text_rejected(self):
+        update = _make_update("Termin morgen um 10 Uhr")
+        update.effective_user.id = 99999
+        context = _make_context()
+        with patch.object(settings, "allowed_user_ids", [12345]):
+            with patch("src.bot.handlers.extract_event") as mock_extract:
+                result = await handle_text(update, context)
+        mock_extract.assert_not_called()
+        msg = update.message.reply_text.call_args[0][0]
+        assert "nicht berechtigt" in msg
+        assert result == ConversationHandler.END
+
+    async def test_authorized_text_passes(self):
+        update = _make_update("Termin morgen um 10 Uhr")
+        context = _make_context()
+        with patch.object(settings, "allowed_user_ids", [12345]):
+            with patch("src.bot.handlers.extract_event", new=AsyncMock(return_value=None)) as mock_extract:
+                await handle_text(update, context)
+        mock_extract.assert_called_once()
+
+    async def test_empty_allowlist_allows_everyone(self):
+        update = _make_update("Termin morgen um 10 Uhr")
+        update.effective_user.id = 99999
+        with patch.object(settings, "allowed_user_ids", []):
+            assert _is_authorized(update) is True
+
+    async def test_unauthorized_start_rejected(self):
+        update = _make_update("/start")
+        update.effective_user.id = 99999
+        context = _make_context()
+        with patch.object(settings, "allowed_user_ids", [12345]):
+            result = await start(update, context)
+        msg = update.message.reply_text.call_args[0][0]
+        assert "nicht berechtigt" in msg
+        assert result == ConversationHandler.END
+
+    def test_authorized_user_id_in_list(self):
+        update = _make_update()
+        with patch.object(settings, "allowed_user_ids", [111, 12345]):
+            assert _is_authorized(update) is True
+
+    def test_missing_user_is_unauthorized(self):
+        update = _make_update()
+        update.effective_user = None
+        with patch.object(settings, "allowed_user_ids", [12345]):
+            assert _is_authorized(update) is False
 
 
 class TestHandleConfirmationYes:

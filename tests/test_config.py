@@ -3,6 +3,7 @@ import os
 import tempfile
 
 import pytest
+from pydantic import ValidationError
 
 from src.config import Settings
 
@@ -79,3 +80,50 @@ class TestSettings:
     def test_custom_timezone(self):
         s = minimal_settings(timezone="America/New_York")
         assert s.timezone == "America/New_York"
+
+    def test_allowed_user_ids_default_empty(self):
+        s = minimal_settings()
+        assert s.allowed_user_ids == []
+
+    def test_allowed_user_ids_custom(self):
+        s = minimal_settings(allowed_user_ids=[123, 456])
+        assert s.allowed_user_ids == [123, 456]
+
+    def test_allowed_user_ids_from_env(self, monkeypatch):
+        monkeypatch.setenv("ALLOWED_USER_IDS", "[123, 456]")
+        s = minimal_settings()
+        assert s.allowed_user_ids == [123, 456]
+
+    def test_allowed_user_ids_bare_int(self, monkeypatch):
+        monkeypatch.setenv("ALLOWED_USER_IDS", "123456789")
+        s = minimal_settings()
+        assert s.allowed_user_ids == [123456789]
+
+    def test_allowed_user_ids_comma_separated(self, monkeypatch):
+        monkeypatch.setenv("ALLOWED_USER_IDS", "123,456")
+        s = minimal_settings()
+        assert s.allowed_user_ids == [123, 456]
+
+    def test_allowed_user_ids_comma_separated_with_spaces(self, monkeypatch):
+        monkeypatch.setenv("ALLOWED_USER_IDS", "123, 456, 789")
+        s = minimal_settings()
+        assert s.allowed_user_ids == [123, 456, 789]
+
+    def test_allowed_user_ids_empty_string(self, monkeypatch):
+        monkeypatch.setenv("ALLOWED_USER_IDS", "")
+        s = minimal_settings()
+        assert s.allowed_user_ids == []
+
+    def test_allowed_user_ids_whitespace(self, monkeypatch):
+        monkeypatch.setenv("ALLOWED_USER_IDS", "   ")
+        s = minimal_settings()
+        assert s.allowed_user_ids == []
+
+    def test_allowed_user_ids_int_kwarg(self):
+        s = minimal_settings(allowed_user_ids=123)
+        assert s.allowed_user_ids == [123]
+
+    def test_allowed_user_ids_invalid_raises(self, monkeypatch):
+        monkeypatch.setenv("ALLOWED_USER_IDS", "abc")
+        with pytest.raises(ValidationError):
+            minimal_settings()

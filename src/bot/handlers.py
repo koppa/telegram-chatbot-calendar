@@ -1,5 +1,7 @@
 import logging
-from datetime import datetime, date
+from datetime import datetime
+from functools import wraps
+from zoneinfo import ZoneInfo
 
 from telegram import Update, Document, PhotoSize, Voice, Audio
 from telegram.helpers import escape_markdown
@@ -12,6 +14,7 @@ from telegram.ext import (
 )
 
 from src.bot.states import WAITING_FOR_INPUT, AWAITING_DATE, AWAITING_CONFIRMATION
+from src.config import settings
 from src.services.openrouter import describe_image, extract_event, modify_event
 from src.services.whisper import transcribe_audio
 from src.services.calendar import create_event
@@ -27,6 +30,33 @@ def _user_id(update: Update) -> str:
     return user.username or user.first_name or str(user.id)
 
 
+def _is_authorized(update: Update) -> bool:
+    if not settings.allowed_user_ids:
+        return True
+    user = update.effective_user
+    return user is not None and user.id in settings.allowed_user_ids
+
+
+def _authorized_only(func):
+    @wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not _is_authorized(update):
+            user = update.effective_user
+            logger.warning(
+                "Unauthorized access denied: %s (id=%s)",
+                _user_id(update),
+                user.id if user else "unknown",
+            )
+            await _reply(
+                update,
+                "Dieser Bot ist privat. Du bist nicht berechtigt, ihn zu verwenden.",
+            )
+            return ConversationHandler.END
+        return await func(update, context)
+
+    return wrapper
+
+
 def _log_received(update: Update, text: str) -> None:
     preview = text[:100].replace("\n", " ")
     logger.info("Received from %s: %s", _user_id(update), preview)
@@ -39,9 +69,10 @@ async def _reply(update: Update, text: str, **kwargs) -> None:
 
 
 def _today_str() -> str:
-    return date.today().isoformat()
+    return datetime.now(ZoneInfo(settings.timezone)).date().isoformat()
 
 
+@_authorized_only
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await _reply(update, 
         "Hi! Ich kann Termine für deinen Google Kalender erstellen.\n"
@@ -51,18 +82,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return WAITING_FOR_INPUT
 
 
+@_authorized_only
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
     await _reply(update, "OK, abgebrochen.")
     return WAITING_FOR_INPUT
 
 
+@_authorized_only
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text
     _log_received(update, text)
     return await _process_text(update, context, text)
 
 
+@_authorized_only
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     photo: PhotoSize = update.message.photo[-1]
     file = await photo.get_file()
@@ -94,6 +128,7 @@ async def _transcribe_message(update: Update) -> tuple[str | None, str | None]:
     return None, None
 
 
+@_authorized_only
 async def _route_transcription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text, error = await _transcribe_message(update)
     if text is None:
@@ -111,6 +146,7 @@ handle_voice = _route_transcription
 handle_audio = _route_transcription
 
 
+@_authorized_only
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     doc: Document = update.message.document
     if doc.mime_type and doc.mime_type.startswith("image/"):
@@ -126,6 +162,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return WAITING_FOR_INPUT
 
 
+@_authorized_only
 async def handle_unsupported(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await _reply(update, 
         "Nur Text, Bilder und Sprachnachrichten werden unterst\u00fctzt."
@@ -196,6 +233,7 @@ async def _get_text(update: Update) -> str:
     return ""
 
 
+@_authorized_only
 async def handle_awaiting_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = await _get_text(update)
     if not text:
@@ -297,6 +335,7 @@ async def _confirm_and_create(
     return AWAITING_CONFIRMATION
 
 
+@_authorized_only
 async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = (await _get_text(update)).lower().strip()
     if not text:

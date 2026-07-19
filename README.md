@@ -73,6 +73,7 @@ cp .env.example .env
 | `BOT_WEBHOOK_URL` | Public HTTPS URL (webhook only) |
 | `BOT_PORT` | Port (default: 8443) |
 | `TIMEZONE` | Timezone (default: `Europe/Berlin`) |
+| `ALLOWED_USER_IDS` | Allowed Telegram user IDs: JSON list (`[123456]`), comma-separated (`123,456`) or single ID (empty = open to everyone) |
 
 ## Running
 

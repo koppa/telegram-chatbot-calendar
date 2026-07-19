@@ -22,6 +22,11 @@ async def error_handler(update: Update | None, context: ContextTypes.DEFAULT_TYP
 
 
 def main() -> None:
+    if not settings.allowed_user_ids:
+        logger.warning(
+            "ALLOWED_USER_IDS is not set - the bot will respond to every Telegram user"
+        )
+
     app = (
         Application.builder()
         .token(settings.telegram_bot_token)
