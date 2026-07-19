@@ -14,8 +14,6 @@ class Settings(BaseSettings):
     openrouter_stt_model: str = "openai/whisper-large-v3"
     google_service_account_file: str = "service-account.json"
     google_calendar_id: str
-    bot_use_webhook: bool = False
-    bot_webhook_url: Optional[str] = None
     bot_port: int = 8443
     timezone: str = "Europe/Berlin"
     # Telegram user IDs allowed to use the bot. Empty list = allow everyone.
@@ -56,15 +54,6 @@ class Settings(BaseSettings):
             path = os.path.join(os.path.dirname(__file__), "..", path)
         with open(path) as f:
             return json.load(f)
-
-    @property
-    def webhook_url(self) -> str:
-        base = (self.bot_webhook_url or "").rstrip("/")
-        return f"{base}/{self.telegram_bot_token}"
-
-    @property
-    def webhook_path(self) -> str:
-        return self.telegram_bot_token
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

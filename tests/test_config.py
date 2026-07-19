@@ -22,7 +22,6 @@ def minimal_settings(**overrides) -> Settings:
         "telegram_bot_token": "123:ABC",
         "openrouter_api_key": "sk-or-v1-test",
         "google_calendar_id": "test@group.calendar.google.com",
-        "bot_webhook_url": "https://example.com",
         "bot_port": 8443,
         "timezone": "Europe/Berlin",
     }
@@ -36,18 +35,6 @@ def minimal_settings(**overrides) -> Settings:
 
 
 class TestSettings:
-    def test_webhook_url_combines_base_and_token(self):
-        s = minimal_settings()
-        assert s.webhook_url == "https://example.com/123:ABC"
-
-    def test_webhook_url_strips_trailing_slash(self):
-        s = minimal_settings(bot_webhook_url="https://example.com/")
-        assert s.webhook_url == "https://example.com/123:ABC"
-
-    def test_webhook_path_is_token(self):
-        s = minimal_settings()
-        assert s.webhook_path == "123:ABC"
-
     def test_google_credentials_from_file(self):
         s = minimal_settings()
         creds = s.google_credentials

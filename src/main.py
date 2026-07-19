@@ -38,22 +38,8 @@ def main() -> None:
     app.add_handler(get_conversation_handler())
     app.add_error_handler(error_handler)
 
-    if settings.bot_use_webhook:
-        logger.info(
-            "Starting webhook on 0.0.0.0:%s path=/%s url=%s",
-            settings.bot_port,
-            settings.webhook_path,
-            settings.webhook_url,
-        )
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=settings.bot_port,
-            url_path=settings.webhook_path,
-            webhook_url=settings.webhook_url,
-        )
-    else:
-        logger.info("Starting polling (no webhook)")
-        app.run_polling()
+    logger.info("Starting polling")
+    app.run_polling()
 
 
 if __name__ == "__main__":

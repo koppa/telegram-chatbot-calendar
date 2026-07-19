@@ -40,7 +40,6 @@ Telegram User
    - Enable the Google Calendar API
    - Create a service account, download the JSON key
    - Share your target Google Calendar with the service account email as editor
-5. **VPS** (optional) – For webhook mode with HTTPS domain
 
 ## Setup
 
@@ -69,8 +68,6 @@ cp .env.example .env
 | `OPENROUTER_STT_MODEL` | Speech-to-text model (default: `openai/whisper-large-v3`) |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | Path to the service account JSON file |
 | `GOOGLE_CALENDAR_ID` | Shared calendar ID |
-| `BOT_USE_WEBHOOK` | `true` for webhook, `false` for polling (default) |
-| `BOT_WEBHOOK_URL` | Public HTTPS URL (webhook only) |
 | `BOT_PORT` | Port (default: 8443) |
 | `TIMEZONE` | Timezone (default: `Europe/Berlin`) |
 | `ALLOWED_USER_IDS` | Allowed Telegram user IDs: JSON list (`[123456]`), comma-separated (`123,456`) or single ID (empty = open to everyone) |
@@ -88,33 +85,6 @@ python -m src.main
 
 ```bash
 docker compose up --build
-```
-
-### Webhook Mode
-
-Webhook mode requires the bot to be reachable via HTTPS (e.g. nginx/Caddy with Let's Encrypt):
-
-```bash
-BOT_USE_WEBHOOK=true docker compose up --build
-```
-
-Example nginx configuration:
-
-```nginx
-server {
-    listen 443 ssl;
-    server_name your-domain.com;
-
-    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:8443;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
 ```
 
 ## Usage
